@@ -1,10 +1,57 @@
 ---
+etcd:
+  version: 3.4.0
+  name: "${etcd_name}"
+  discovery: "${etcd_discovery}"
+  initial_cluster: "${etcd_name}=https://${domain_name}:2380"
+  initial_advertise_peer_urls: "https://${domain_name}:2380"
+  advertise_client_urls: "https://${domain_name}:2379"
+  listen_client_urls: "https://0.0.0.0:2379"
+  listen_peer_urls: "https://0.0.0.0:2380"
+  listen_metrics_urls: "http://0.0.0.0:2381"
+  strict_reconfig_check: true
+  ssl_dir: "/etc/ssl/etcd"
+  trusted_ca_file: "/etc/ssl/certs/etcd/server-ca.crt"
+  cert_file: "/etc/ssl/certs/etcd/server.crt"
+  key_file: "/etc/ssl/certs/etcd/server.key"
+  client_cert_auth: true
+  peer_trusted_ca_file: "/etc/ssl/certs/etcd/peer-ca.crt"
+  peer_cert_file: "/etc/ssl/certs/etcd/peer.crt"
+  peer_key_file: "/etc/ssl/certs/etcd/peer.key"
+  peer_client_cert_auth: true
 systemd:
   units:
+    - name: qemu-agent.service
+      enabled: true
+      contents: |
+        [Unit]
+        Description=QEMU Agent
+        After=docker.service
+        [Service]
+        ExecStart=/usr/bin/docker run \
+          --privileged=true \
+          --cap-add=ALL \
+          --net=host \
+          --name=qemu-guest-agent \
+          -e container=1 \
+          -e HOST=/host \
+          -e TERM=xterm \
+          -v /dev/virtio-ports:/dev/virtio-ports \
+          -v /etc/os-release:/etc/os-release:ro \
+          -v /dev:/dev \
+          -v /proc:/hostproc \
+          -v /run/systemd:/run/systemd \
+          -v /var/log/qemu-ga:/var/log/qemu-ga:rw \
+          -v /var/run/docker.sock:/var/run/docker.sock:ro \
+          --entrypoint qemu-ga \
+          rancher/os-qemuguestagent:v2.8.1-2 \
+          -- -v
+        Restart=always
+        RestartSec=10
+        [Install]
+        WantedBy=multi-user.target
     - name: docker.service
       enabled: true
-    - name: locksmithd.service
-      mask: true
     - name: kubelet.path
       enabled: true
       contents: |
@@ -34,7 +81,7 @@ systemd:
         Wants=rpc-statd.service
         [Service]
         Environment=KUBELET_IMAGE=docker://quay.io/poseidon/kubelet:v1.18.5
-        Environment=KUBELET_CGROUP_DRIVER=${cgroup_driver}
+        Environment=KUBELET_CGROUP_DRIVER=cgroupfs
         ExecStartPre=/bin/mkdir -p /etc/kubernetes/cni/net.d
         ExecStartPre=/bin/mkdir -p /etc/kubernetes/manifests
         ExecStartPre=/bin/mkdir -p /opt/cni/bin
@@ -131,4 +178,21 @@ passwd:
     - name: core
       ssh_authorized_keys:
         - ${ssh_authorized_key}
+locksmith:
+  reboot_strategy: "etcd-lock"
+  window_start:    "Sun 1:00"
+  window_length:   "2h"
+networkd:
+  units:
+    - name: 00-eth0.network
+      contents: |
+        [Match]
+        Name=eth0
 
+        [Network]
+        DHCP=no
+        DNS=${dns}
+        Address=${address}
+        [Route]
+        Gateway=${gateway}
+        GatewayOnlink=yes

@@ -3,8 +3,8 @@ module "bootstrap" {
   source = "git::https://github.com/poseidon/terraform-render-bootstrap.git?ref=9a5132b2ad199ccb87e69b1b203cbb3caa9a755e"
 
   cluster_name                    = var.cluster_name
-  api_servers                     = [var.k8s_domain_name]
-  etcd_servers                    = var.controllers.*.domain
+  api_servers                     = [var.k8s_domain_name != "" ? var.k8s_domain_name : var.controllers.0.ipv4]
+  etcd_servers                    = concat(var.controllers.*.ipv4, var.workers.*.ipv4)
   asset_dir                       = var.asset_dir
   networking                      = var.networking
   network_mtu                     = var.network_mtu

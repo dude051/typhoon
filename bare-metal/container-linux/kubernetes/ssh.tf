@@ -14,15 +14,13 @@ resource "null_resource" "copy-controller-secrets" {
   # Without depends_on, remote-exec could start and wait for machines before
   # matchbox groups are written, causing a deadlock.
   depends_on = [
-    matchbox_group.install,
-    matchbox_group.controller,
-    matchbox_group.worker,
+    libvirt_domain.controller,
     module.bootstrap,
   ]
 
   connection {
     type    = "ssh"
-    host    = var.controllers.*.domain[count.index]
+    host    = var.controllers.*.domain[count.index] != "" ? var.controllers.*.domain[count.index] : var.controllers.*.ipv4[count.index]
     user    = "core"
     timeout = "60m"
   }
@@ -52,14 +50,13 @@ resource "null_resource" "copy-worker-secrets" {
   # Without depends_on, remote-exec could start and wait for machines before
   # matchbox groups are written, causing a deadlock.
   depends_on = [
-    matchbox_group.install,
-    matchbox_group.controller,
-    matchbox_group.worker,
+    libvirt_domain.worker,
+    module.bootstrap,
   ]
 
   connection {
     type    = "ssh"
-    host    = var.workers.*.domain[count.index]
+    host    = var.workers.*.domain[count.index] != "" ? var.workers.*.domain[count.index] : var.workers.*.ipv4[count.index]
     user    = "core"
     timeout = "60m"
   }
@@ -88,7 +85,7 @@ resource "null_resource" "bootstrap" {
 
   connection {
     type    = "ssh"
-    host    = var.controllers[0].domain
+    host    = var.controllers[0].domain != "" ? var.controllers[0].domain : var.controllers[0].ipv4
     user    = "core"
     timeout = "15m"
   }
