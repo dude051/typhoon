@@ -1,6 +1,35 @@
 ---
 systemd:
   units:
+    - name: qemu-agent.service
+      enabled: true
+      contents: |
+        [Unit]
+        Description=QEMU Agent
+        After=docker.service
+        [Service]
+        ExecStart=/usr/bin/docker run \
+          --privileged=true \
+          --cap-add=ALL \
+          --net=host \
+          --name=qemu-guest-agent \
+          -e container=1 \
+          -e HOST=/host \
+          -e TERM=xterm \
+          -v /dev/virtio-ports:/dev/virtio-ports \
+          -v /etc/os-release:/etc/os-release:ro \
+          -v /dev:/dev \
+          -v /proc:/hostproc \
+          -v /run/systemd:/run/systemd \
+          -v /var/log/qemu-ga:/var/log/qemu-ga:rw \
+          -v /var/run/docker.sock:/var/run/docker.sock:ro \
+          --entrypoint qemu-ga \
+          rancher/os-qemuguestagent:v2.8.1-2 \
+          -- -v
+        Restart=always
+        RestartSec=10
+        [Install]
+        WantedBy=multi-user.target
     - name: etcd-member.service
       enabled: true
       dropins:
@@ -11,12 +40,13 @@ systemd:
             Environment="ETCD_IMAGE_URL=docker://quay.io/coreos/etcd"
             Environment="RKT_RUN_ARGS=--insecure-options=image"
             Environment="ETCD_NAME=${etcd_name}"
+            Environment="ETCD_DISCOVERY=${etcd_discovery}"
             Environment="ETCD_ADVERTISE_CLIENT_URLS=https://${domain_name}:2379"
             Environment="ETCD_INITIAL_ADVERTISE_PEER_URLS=https://${domain_name}:2380"
             Environment="ETCD_LISTEN_CLIENT_URLS=https://0.0.0.0:2379"
             Environment="ETCD_LISTEN_PEER_URLS=https://0.0.0.0:2380"
             Environment="ETCD_LISTEN_METRICS_URLS=http://0.0.0.0:2381"
-            Environment="ETCD_INITIAL_CLUSTER=${etcd_initial_cluster}"
+            Environment="ETCD_INITIAL_CLUSTER=${etcd_name}=https://${domain_name}:2380"
             Environment="ETCD_STRICT_RECONFIG_CHECK=true"
             Environment="ETCD_SSL_DIR=/etc/ssl/etcd"
             Environment="ETCD_TRUSTED_CA_FILE=/etc/ssl/certs/etcd/server-ca.crt"
@@ -29,8 +59,6 @@ systemd:
             Environment="ETCD_PEER_CLIENT_CERT_AUTH=true"
     - name: docker.service
       enabled: true
-    - name: locksmithd.service
-      mask: true
     - name: kubelet.path
       enabled: true
       contents: |
@@ -61,7 +89,7 @@ systemd:
         Wants=rpc-statd.service
         [Service]
         Environment=KUBELET_IMAGE=docker://quay.io/poseidon/kubelet:v1.18.6
-        Environment=KUBELET_CGROUP_DRIVER=${cgroup_driver}
+        Environment=KUBELET_CGROUP_DRIVER=cgroupfs
         ExecStartPre=/bin/mkdir -p /etc/kubernetes/cni/net.d
         ExecStartPre=/bin/mkdir -p /etc/kubernetes/manifests
         ExecStartPre=/bin/mkdir -p /opt/cni/bin
@@ -214,3 +242,21 @@ passwd:
     - name: core
       ssh_authorized_keys:
         - ${ssh_authorized_key}
+locksmith:
+  reboot_strategy: "etcd-lock"
+  window_start:    "Sun 1:00"
+  window_length:   "2h"
+networkd:
+  units:
+    - name: 00-eth0.network
+      contents: |
+        [Match]
+        Name=eth0
+
+        [Network]
+        DHCP=no
+        DNS=${dns}
+        Address=${address}
+        [Route]
+        Gateway=${gateway}
+        GatewayOnlink=yes

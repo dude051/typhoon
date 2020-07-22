@@ -3,50 +3,119 @@ variable "cluster_name" {
   description = "Unique cluster name"
 }
 
-# bare-metal
+# libvirt
 
-variable "matchbox_http_endpoint" {
+variable "os_image" {
   type        = string
-  description = "Matchbox HTTP read-only endpoint (e.g. http://matchbox.example.com:8080)"
+  description = "Location of OS image to provision volumes with."
 }
 
-variable "os_channel" {
+variable "libvirt_pool" {
   type        = string
-  description = "Channel for a Container Linux derivative (coreos-stable, coreos-beta, coreos-alpha, flatcar-stable, flatcar-beta, flatcar-alpha, flatcar-edge)"
+  description = "Location of where to create libvirt directory pool to store volumes"
+  default     = "/var/lib/libvirt/images"
 }
 
-variable "os_version" {
+variable "bridge_device" {
   type        = string
-  description = "Version for a Container Linux derivative to PXE and install (e.g. 2079.5.1)"
+  description = "The bridge device defines the name of a bridge device which will be used to construct the virtual network"
+  default     = "br0"
+}
+
+variable "network_autostart" {
+  type        = bool
+  description = "Set to false to not start the network on host boot up."
+  default     = true
+}
+
+variable "controller_vcpu" {
+  description = "Number of vCPUs to allocate for each controller"
+  type        = string
+  default     = 2
+}
+
+variable "controller_memory" {
+  description = "Amount of RAM to allocate in MiB for each controller"
+  type        = string
+  default     = 2048
+}
+
+variable "worker_vcpu" {
+  description = "Number of vCPUs to allocate for each worker"
+  type        = string
+  default     = 10
+}
+
+variable "worker_memory" {
+  description = "Amount of RAM to allocate in MiB for each worker"
+  type        = string
+  default     = 4096
 }
 
 # machines
 
+variable "etcd_discovery_url" {
+  type        = string
+  description = "Discovery URL used for etcd clustering."
+}
+
 variable "controllers" {
   type = list(object({
-    name   = string
-    mac    = string
-    domain = string
+    name    = string
+    domain  = string
+    ipv4    = string
+    cidr    = string
+    dns     = string
+    gateway = string
   }))
   description = <<EOD
-List of controller machine details (unique name, identifying MAC address, FQDN)
-[{ name = "node1", mac = "52:54:00:a1:9c:ae", domain = "node1.example.com"}]
+Optional list of controller machine details (unique name, FQDN and IP)
+[{ name = "node1", domain = "node1.example.com", ipv4 = "192.168.100.50}]
 EOD
+  default = [{
+    name    = "node1"
+    domain  = ""
+    ipv4    = ""
+    cidr    = ""
+    dns     = ""
+    gateway = ""
+  }]
 }
 
 variable "workers" {
   type = list(object({
-    name   = string
-    mac    = string
-    domain = string
+    name    = string
+    domain  = string
+    ipv4    = string
+    cidr    = string
+    dns     = string
+    gateway = string
   }))
   description = <<EOD
-List of worker machine details (unique name, identifying MAC address, FQDN)
+Optional list of worker machine details (unique name and FQDN)
 [
-  { name = "node2", mac = "52:54:00:b2:2f:86", domain = "node2.example.com"},
-  { name = "node3", mac = "52:54:00:c3:61:77", domain = "node3.example.com"}
+  { name = "node2", domain = "node2.example.com", ipv4 = "192.168.100.51},
+  { name = "node3", domain = "node3.example.com", ipv4 = "192.168.100.52}
 ]
 EOD
+  default = [
+    {
+      name    = "node2"
+      domain  = ""
+      ipv4    = ""
+      cidr    = ""
+      dns     = ""
+      gateway = ""
+    },
+    {
+      name   = "node3"
+      domain = ""
+      ipv4   = ""
+      cidr    = ""
+      dns     = ""
+      gateway = ""
+    }
+  ]
 }
 
 variable "snippets" {
@@ -71,7 +140,8 @@ variable "worker_node_taints" {
 
 variable "k8s_domain_name" {
   type        = string
-  description = "Controller DNS name which resolves to a controller instance. Workers and kubeconfig's will communicate with this endpoint (e.g. cluster.example.com)"
+  description = "Optional controller DNS name which resolves to a controller instance. Workers and kubeconfig's will communicate with this endpoint (e.g. cluster.example.com). If not set, will use IP address of first controller."
+  default     = ""
 }
 
 variable "ssh_authorized_key" {
@@ -113,30 +183,6 @@ EOD
 }
 
 # optional
-
-variable "download_protocol" {
-  type        = string
-  description = "Protocol iPXE should use to download the kernel and initrd. Defaults to https, which requires iPXE compiled with crypto support. Unused if cached_install is true."
-  default     = "https"
-}
-
-variable "cached_install" {
-  type        = bool
-  description = "Whether Container Linux should PXE boot and install from matchbox /assets cache. Note that the admin must have downloaded the os_version into matchbox assets."
-  default     = false
-}
-
-variable "install_disk" {
-  type        = string
-  default     = "/dev/sda"
-  description = "Disk device to which the install profiles should install Container Linux (e.g. /dev/sda)"
-}
-
-variable "kernel_args" {
-  type        = list(string)
-  description = "Additional kernel arguments to provide at PXE boot."
-  default     = []
-}
 
 variable "enable_reporting" {
   type        = bool
